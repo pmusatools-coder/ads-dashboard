@@ -220,9 +220,8 @@ Write a 3-part briefing:
 Tight, no fluff. Talk like a smart colleague, not a report.`;
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+const res = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content: prompt }] }),
       });
       const reader = res.body.getReader();
@@ -348,16 +347,8 @@ function AccountDetail({ client, onBack }) {
   );
 }
 
-export default function App() {
-const [clients, setClients] = useState(MOCK_CLIENTS);
-const [loading, setLoading] = useState(false);
-
-useEffect(() => {
-  fetch("/api/data")
-    .then(r => r.json())
-    .then(data => { if (data.length) setClients(data); })
-    .catch(() => {});
-}, []);
+export default function app() {
+  const [clients] = useState(MOCK_CLIENTS);
   const [selected, setSelected] = useState(null);
   const [sort, setSort] = useState("rag");
   const [filter, setFilter] = useState("all");
