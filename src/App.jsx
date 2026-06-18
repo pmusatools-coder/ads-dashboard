@@ -1,368 +1,66 @@
 import { useState, useEffect } from "react";
-const COLORS = {
-  green: "#16a34a", greenBg: "#f0fdf4", greenBorder: "#bbf7d0",
-  yellow: "#ca8a04", yellowBg: "#fefce8", yellowBorder: "#fde68a",
-  red: "#dc2626", redBg: "#fef2f2", redBorder: "#fecaca",
-  grayBorder: "#e5e7eb", blue: "#2563eb", blueBg: "#eff6ff", blueBorder: "#bfdbfe",
-  ink: "#111827", muted: "#6b7280", surface: "#ffffff", page: "#f3f4f6", accent: "#2563eb",
-};
-
-const MOCK_CLIENTS = [];
-function getRag(value, metric) {
-  const v = parseFloat(value);
-  if (metric.higher) {
-    if (v >= metric.green[0]) return "green";
-    if (v >= metric.yellow[0]) return "yellow";
-    return "red";
-  } else {
-    if (v <= metric.green[1]) return "green";
-    if (v <= metric.yellow[1]) return "yellow";
-    return "red";
-  }
-}
-
-function getTrend(weeks, key, group) {
-  if (weeks.length < 2) return 0;
-  const prev = weeks[weeks.length - 2][group][key];
-  const curr = weeks[weeks.length - 1][group][key];
-  return ((curr - prev) / prev) * 100;
-}
-
-function fmtVal(metric, v) {
-  if (metric.unit === "$") return `$${parseFloat(v).toFixed(0)}`;
-  return `${v}${metric.suffix}`;
-}
-
-function allRags(client) {
-  const latest = client.weeks[client.weeks.length - 1];
-  return [
-    ...LEADING_METRICS.map(m => getRag(latest.leading[m.key], m)),
-    ...LAGGING_METRICS.map(m => getRag(latest.lagging[m.key], m)),
-  ];
-}
-
-function RagDot({ rag, size = 10 }) {
-  const c = rag === "green" ? COLORS.green : rag === "yellow" ? COLORS.yellow : COLORS.red;
-  return <span style={{ display: "inline-block", width: size, height: size, borderRadius: "50%", background: c, flexShrink: 0 }} />;
-}
-
-function TrendArrow({ pct, higher }) {
-  const positive = higher ? pct > 0 : pct < 0;
-  const neutral = Math.abs(pct) < 1;
-  const color = neutral ? COLORS.muted : positive ? COLORS.green : COLORS.red;
-  const arrow = neutral ? "→" : pct > 0 ? "↑" : "↓";
-  return <span style={{ color, fontSize: 12, fontWeight: 500 }}>{arrow} {Math.abs(pct).toFixed(1)}%</span>;
-}
-
-function Sparkline({ weeks, metricKey, group, width = 60, height = 24 }) {
-  const vals = weeks.map(w => w[group][metricKey]);
-  if (vals.length < 2) return null;
-  const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1;
-  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * width},${height - ((v - min) / range) * (height - 4) - 2}`).join(" ");
-  const up = vals[vals.length - 1] >= vals[vals.length - 2];
-  const strokeColor = up ? COLORS.green : COLORS.red;
-  return (
-    <svg width={width} height={height} style={{ overflow: "visible" }}>
-      <polyline points={pts} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinejoin="round" />
-      {vals.map((v, i) => {
-        const x = (i / (vals.length - 1)) * width;
-        const y = height - ((v - min) / range) * (height - 4) - 2;
-        return <circle key={i} cx={x} cy={y} r={i === vals.length - 1 ? 3 : 2} fill={i === vals.length - 1 ? strokeColor : "#d1d5db"} />;
-      })}
-    </svg>
-  );
-}
-
-function MetricCard({ metric, group, weeks }) {
-  const latest = weeks[weeks.length - 1][group][metric.key];
-  const rag = getRag(latest, metric);
-  const trend = getTrend(weeks, metric.key, group);
-  const bg = rag === "green" ? COLORS.greenBg : rag === "yellow" ? COLORS.yellowBg : COLORS.redBg;
-  const border = rag === "green" ? COLORS.greenBorder : rag === "yellow" ? COLORS.yellowBorder : COLORS.redBorder;
-  return (
-    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, color: COLORS.muted, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{metric.label}</span>
-        <RagDot rag={rag} size={8} />
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: COLORS.ink }}>{fmtVal(metric, latest)}</div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <TrendArrow pct={trend} higher={metric.higher} />
-        <Sparkline weeks={weeks} metricKey={metric.key} group={group} />
-      </div>
-      <div style={{ fontSize: 11, color: COLORS.muted }}>{metric.desc}</div>
-    </div>
-  );
-}
-
-function ClientRowSummary({ client, onClick }) {
-  const rags = allRags(client);
-  const reds = rags.filter(r => r === "red").length;
-  const yellows = rags.filter(r => r === "yellow").length;
-  const greens = rags.filter(r => r === "green").length;
-  const overallRag = reds >= 2 ? "red" : reds >= 1 || yellows >= 2 ? "yellow" : "green";
-  const cplTrend = getTrend(client.weeks, "cpl", "lagging");
-  return (
-    <div onClick={onClick}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
-      style={{ background: COLORS.surface, border: `1px solid ${COLORS.grayBorder}`, borderRadius: 10, padding: "14px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 16, transition: "box-shadow 0.15s" }}>
-      <RagDot rag={overallRag} size={12} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: COLORS.ink }}>{client.name}</div>
-        <div style={{ fontSize: 12, color: COLORS.muted }}>{client.location} · ${client.budget.toLocaleString()}/mo</div>
-      </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        {reds > 0 && <span style={{ background: COLORS.redBg, color: COLORS.red, border: `1px solid ${COLORS.redBorder}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{reds} red</span>}
-        {yellows > 0 && <span style={{ background: COLORS.yellowBg, color: COLORS.yellow, border: `1px solid ${COLORS.yellowBorder}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{yellows} yellow</span>}
-        {greens > 0 && <span style={{ background: COLORS.greenBg, color: COLORS.green, border: `1px solid ${COLORS.greenBorder}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{greens} green</span>}
-      </div>
-      <div style={{ fontSize: 12, color: COLORS.muted, whiteSpace: "nowrap" }}>CPL <TrendArrow pct={cplTrend} higher={false} /></div>
-      <div style={{ color: COLORS.muted, fontSize: 16 }}>›</div>
-    </div>
-  );
-}
-
+const COLORS = { green: "#16a34a", greenBg: "#f0fdf4", greenBorder: "#bbf7d0", yellow: "#ca8a04", yellowBg: "#fefce8", yellowBorder: "#fde68a", red: "#dc2626", redBg: "#fef2f2", redBorder: "#fecaca", grayBorder: "#e5e7eb", blue: "#2563eb", blueBg: "#eff6ff", blueBorder: "#bfdbfe", ink: "#111827", muted: "#6b7280", surface: "#ffffff", page: "#f3f4f6", accent: "#2563eb" };
+const LEADING_METRICS = [{ key: "ctr", label: "CTR", unit: "%", suffix: "%", higher: true, green: [5, 100], yellow: [3, 5], desc: "Ad copy effectiveness" }, { key: "searchTermRelevance", label: "Search Term Relevance", unit: "%", suffix: "%", higher: true, green: [75, 100], yellow: [55, 75], desc: "% spend on relevant queries" }, { key: "landingBounce", label: "Landing Bounce Rate", unit: "%", suffix: "%", higher: false, green: [0, 45], yellow: [45, 60], desc: "Ad-to-page match signal" }];
+const LAGGING_METRICS = [{ key: "cpl", label: "Cost per Lead", unit: "$", suffix: "", higher: false, green: [0, 80], yellow: [80, 120], desc: "Core efficiency outcome" }, { key: "conversions", label: "Conversions", unit: "", suffix: "", higher: true, green: [20, 999], yellow: [10, 20], desc: "Leads generated" }, { key: "convRate", label: "Conv. Rate", unit: "%", suffix: "%", higher: true, green: [4.5, 100], yellow: [2.5, 4.5], desc: "Clicks becoming leads" }, { key: "roas", label: "ROAS", unit: "", suffix: "x", higher: true, green: [5, 999], yellow: [3, 5], desc: "Revenue per $ spent" }];
+function getRag(value, metric) { const v = parseFloat(value); if (metric.higher) { if (v >= metric.green[0]) return "green"; if (v >= metric.yellow[0]) return "yellow"; return "red"; } else { if (v <= metric.green[1]) return "green"; if (v <= metric.yellow[1]) return "yellow"; return "red"; } }
+function getTrend(weeks, key, group) { if (weeks.length < 2) return 0; const prev = weeks[weeks.length - 2][group][key]; const curr = weeks[weeks.length - 1][group][key]; return ((curr - prev) / prev) * 100; }
+function fmtVal(metric, v) { if (metric.unit === "$") return `$${parseFloat(v).toFixed(0)}`; return `${v}${metric.suffix}`; }
+function allRags(client) { const latest = client.weeks[client.weeks.length - 1]; return [...LEADING_METRICS.map(m => getRag(latest.leading[m.key], m)), ...LAGGING_METRICS.map(m => getRag(latest.lagging[m.key], m))]; }
+function RagDot({ rag, size = 10 }) { const c = rag === "green" ? COLORS.green : rag === "yellow" ? COLORS.yellow : COLORS.red; return <span style={{ display: "inline-block", width: size, height: size, borderRadius: "50%", background: c, flexShrink: 0 }} />; }
+function TrendArrow({ pct, higher }) { const positive = higher ? pct > 0 : pct < 0; const neutral = Math.abs(pct) < 1; const color = neutral ? COLORS.muted : positive ? COLORS.green : COLORS.red; const arrow = neutral ? "→" : pct > 0 ? "↑" : "↓"; return <span style={{ color, fontSize: 12, fontWeight: 500 }}>{arrow} {Math.abs(pct).toFixed(1)}%</span>; }
+function Sparkline({ weeks, metricKey, group, width = 60, height = 24 }) { const vals = weeks.map(w => w[group][metricKey]); if (vals.length < 2) return null; const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1; const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * width},${height - ((v - min) / range) * (height - 4) - 2}`).join(" "); const up = vals[vals.length - 1] >= vals[vals.length - 2]; const sc = up ? COLORS.green : COLORS.red; return (<svg width={width} height={height} style={{ overflow: "visible" }}><polyline points={pts} fill="none" stroke={sc} strokeWidth="1.5" strokeLinejoin="round" />{vals.map((v, i) => { const x = (i / (vals.length - 1)) * width; const y = height - ((v - min) / range) * (height - 4) - 2; return <circle key={i} cx={x} cy={y} r={i === vals.length - 1 ? 3 : 2} fill={i === vals.length - 1 ? sc : "#d1d5db"} />; })}</svg>); }
+function MetricCard({ metric, group, weeks }) { const latest = weeks[weeks.length - 1][group][metric.key]; const rag = getRag(latest, metric); const trend = getTrend(weeks, metric.key, group); const bg = rag === "green" ? COLORS.greenBg : rag === "yellow" ? COLORS.yellowBg : COLORS.redBg; const border = rag === "green" ? COLORS.greenBorder : rag === "yellow" ? COLORS.yellowBorder : COLORS.redBorder; return (<div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 11, color: COLORS.muted, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{metric.label}</span><RagDot rag={rag} size={8} /></div><div style={{ fontSize: 22, fontWeight: 600, color: COLORS.ink }}>{fmtVal(metric, latest)}</div><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><TrendArrow pct={trend} higher={metric.higher} /><Sparkline weeks={weeks} metricKey={metric.key} group={group} /></div><div style={{ fontSize: 11, color: COLORS.muted }}>{metric.desc}</div></div>); }
+function ClientRowSummary({ client, onClick }) { const rags = allRags(client); const reds = rags.filter(r => r === "red").length; const yellows = rags.filter(r => r === "yellow").length; const greens = rags.filter(r => r === "green").length; const overallRag = reds >= 2 ? "red" : reds >= 1 || yellows >= 2 ? "yellow" : "green"; const cplTrend = getTrend(client.weeks, "cpl", "lagging"); return (<div onClick={onClick} onMouseEnter={e => e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"} onMouseLeave={e => e.currentTarget.style.boxShadow = "none"} style={{ background: COLORS.surface, border: `1px solid ${COLORS.grayBorder}`, borderRadius: 10, padding: "14px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 16, transition: "box-shadow 0.15s" }}><RagDot rag={overallRag} size={12} /><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 14, color: COLORS.ink }}>{client.name}</div><div style={{ fontSize: 12, color: COLORS.muted }}>{client.location} · ${client.budget.toLocaleString()}/mo</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{reds > 0 && <span style={{ background: COLORS.redBg, color: COLORS.red, border: `1px solid ${COLORS.redBorder}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{reds} red</span>}{yellows > 0 && <span style={{ background: COLORS.yellowBg, color: COLORS.yellow, border: `1px solid ${COLORS.yellowBorder}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{yellows} yellow</span>}{greens > 0 && <span style={{ background: COLORS.greenBg, color: COLORS.green, border: `1px solid ${COLORS.greenBorder}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{greens} green</span>}</div><div style={{ fontSize: 12, color: COLORS.muted, whiteSpace: "nowrap" }}>CPL <TrendArrow pct={cplTrend} higher={false} /></div><div style={{ color: COLORS.muted, fontSize: 16 }}>›</div></div>); }
 function AICommentary({ client }) {
   const [commentary, setCommentary] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-
   async function generate() {
     setLoading(true); setCommentary(""); setDone(false);
     const latest = client.weeks[client.weeks.length - 1];
     const prev = client.weeks[client.weeks.length - 2];
-
     const issues = [];
-    LEADING_METRICS.forEach(m => {
-      const rag = getRag(latest.leading[m.key], m);
-      const t = ((latest.leading[m.key] - prev.leading[m.key]) / prev.leading[m.key] * 100).toFixed(1);
-      if (rag !== "green") issues.push(`${m.label}: ${fmtVal(m, latest.leading[m.key])} (${rag}, ${t}% WoW)`);
-    });
-    LAGGING_METRICS.forEach(m => {
-      const rag = getRag(latest.lagging[m.key], m);
-      const t = ((latest.lagging[m.key] - prev.lagging[m.key]) / prev.lagging[m.key] * 100).toFixed(1);
-      if (rag !== "green") issues.push(`${m.label}: ${fmtVal(m, latest.lagging[m.key])} (${rag}, ${t}% WoW)`);
-    });
-
-    const prompt = `You are a senior Google Ads account manager at a plumbing/HVAC marketing agency. Analyze this account and give a sharp, actionable briefing.
-
-Account: ${client.name} (${client.location})
-Budget: $${client.budget}/mo | Week: ${latest.week}
-
-FLAGGED METRICS:
-${issues.length ? issues.join("\n") : "All metrics are green."}
-
-ALL CURRENT METRICS:
-Leading — CTR: ${latest.leading.ctr}%, Search Term Relevance: ${latest.leading.searchTermRelevance}%, Landing Bounce: ${latest.leading.landingBounce}%
-Lagging — CPL: $${latest.lagging.cpl}, Conversions: ${latest.lagging.conversions}, Conv Rate: ${latest.lagging.convRate}%, ROAS: ${latest.lagging.roas}x
-
-Write a 3-part briefing:
-1. WHAT'S WRONG — name the specific problems, be direct
-2. ROOT CAUSE — connect leading indicators to lagging outcomes
-3. THIS WEEK'S ACTIONS — 2-3 specific tasks for the account manager
-
-Tight, no fluff. Talk like a smart colleague, not a report.`;
-
+    LEADING_METRICS.forEach(m => { const rag = getRag(latest.leading[m.key], m); const t = ((latest.leading[m.key] - prev.leading[m.key]) / prev.leading[m.key] * 100).toFixed(1); if (rag !== "green") issues.push(`${m.label}: ${fmtVal(m, latest.leading[m.key])} (${rag}, ${t}% WoW)`); });
+    LAGGING_METRICS.forEach(m => { const rag = getRag(latest.lagging[m.key], m); const t = ((latest.lagging[m.key] - prev.lagging[m.key]) / prev.lagging[m.key] * 100).toFixed(1); if (rag !== "green") issues.push(`${m.label}: ${fmtVal(m, latest.lagging[m.key])} (${rag}, ${t}% WoW)`); });
+    const prompt = `You are a senior Google Ads account manager at a plumbing/HVAC marketing agency.\n\nAccount: ${client.name}\nBudget: $${client.budget}/mo | Week: ${latest.week}\n\nFLAGGED: ${issues.length ? issues.join(", ") : "All green"}\nLeading — CTR: ${latest.leading.ctr}%, STR: ${latest.leading.searchTermRelevance}%, Bounce: ${latest.leading.landingBounce}%\nLagging — CPL: $${latest.lagging.cpl}, Conv: ${latest.lagging.conversions}, Rate: ${latest.lagging.convRate}%, ROAS: ${latest.lagging.roas}x\n\n1. WHAT'S WRONG\n2. ROOT CAUSE\n3. THIS WEEK'S ACTIONS\n\nTight, direct, colleague tone.`;
     try {
-const res = await fetch("/api/analyze", {
-        method: "POST",
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content: prompt }] }),
-      });
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done: sd, value } = await reader.read();
-        if (sd) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n"); buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") continue;
-          try { const p = JSON.parse(data); if (p.type === "content_block_delta" && p.delta?.text) setCommentary(prev => prev + p.delta.text); } catch {}
-        }
-      }
+      const res = await fetch("/api/analyze", { method: "POST", body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, stream: true, messages: [{ role: "user", content: prompt }] }) });
+      const reader = res.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+      while (true) { const { done: sd, value } = await reader.read(); if (sd) break; buffer += decoder.decode(value, { stream: true }); const lines = buffer.split("\n"); buffer = lines.pop(); for (const line of lines) { if (!line.startsWith("data: ")) continue; const data = line.slice(6).trim(); if (data === "[DONE]") continue; try { const p = JSON.parse(data); if (p.type === "content_block_delta" && p.delta?.text) setCommentary(prev => prev + p.delta.text); } catch {} } }
       setDone(true);
     } catch { setCommentary("Could not generate commentary. Check your API connection."); setDone(true); }
     setLoading(false);
   }
-
-  return (
-    <div style={{ background: "#0f172a", borderRadius: 12, padding: "20px 24px", marginTop: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div>
-          <div style={{ color: "#f1f5f9", fontWeight: 600, fontSize: 14 }}>AI account analysis</div>
-          <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>Flags issues, traces root causes, recommends actions</div>
-        </div>
-        <button onClick={generate} disabled={loading} style={{ background: loading ? "#1e293b" : COLORS.accent, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer" }}>
-          {loading ? "Analyzing…" : done ? "Re-analyze" : "Analyze account"}
-        </button>
-      </div>
-      {commentary
-        ? <div style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap", fontFamily: "monospace" }}>{commentary}{loading && <span style={{ opacity: 0.5 }}>▊</span>}</div>
-        : !loading && <div style={{ color: "#334155", fontSize: 13, fontStyle: "italic" }}>Click "Analyze account" to get a full diagnosis with recommended actions.</div>
-      }
-    </div>
-  );
+  return (<div style={{ background: "#0f172a", borderRadius: 12, padding: "20px 24px", marginTop: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}><div><div style={{ color: "#f1f5f9", fontWeight: 600, fontSize: 14 }}>AI account analysis</div><div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>Flags issues, traces root causes, recommends actions</div></div><button onClick={generate} disabled={loading} style={{ background: loading ? "#1e293b" : COLORS.accent, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer" }}>{loading ? "Analyzing…" : done ? "Re-analyze" : "Analyze account"}</button></div>{commentary ? <div style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap", fontFamily: "monospace" }}>{commentary}{loading && <span style={{ opacity: 0.5 }}>▊</span>}</div> : !loading && <div style={{ color: "#334155", fontSize: 13, fontStyle: "italic" }}>Click "Analyze account" to get a full diagnosis with recommended actions.</div>}</div>);
 }
-
 function WeeklyTable({ client }) {
   const colSpan = client.weeks.length + 4;
-  const renderRows = (metrics, group, headerLabel, headerColor, headerBg, badgeBg, badgeColor, badgeLabel) => [
-    <tr key={`header-${group}`}>
-      <td colSpan={colSpan} style={{ padding: "8px 10px", fontSize: 11, fontWeight: 600, color: headerColor, textTransform: "uppercase", letterSpacing: "0.08em", background: headerBg }}>{headerLabel}</td>
-    </tr>,
-    ...metrics.map(m => {
-      const trend = getTrend(client.weeks, m.key, group);
-      return (
-        <tr key={m.key} style={{ borderBottom: `1px solid ${COLORS.grayBorder}` }}>
-          <td style={{ padding: "8px 10px", color: COLORS.ink, fontWeight: 500 }}>{m.label}</td>
-          <td style={{ padding: "8px 10px", textAlign: "center" }}>
-            <span style={{ background: badgeBg, color: badgeColor, borderRadius: 4, padding: "2px 6px", fontSize: 10, fontWeight: 600 }}>{badgeLabel}</span>
-          </td>
-          {client.weeks.map(w => {
-            const v = w[group][m.key];
-            const rag = getRag(v, m);
-            const bg = rag === "green" ? COLORS.greenBg : rag === "yellow" ? COLORS.yellowBg : COLORS.redBg;
-            const color = rag === "green" ? COLORS.green : rag === "yellow" ? COLORS.yellow : COLORS.red;
-            return <td key={w.week} style={{ padding: "8px 10px", textAlign: "right", background: bg, color, fontWeight: 600 }}>{fmtVal(m, v)}</td>;
-          })}
-          <td style={{ padding: "8px 10px", textAlign: "right" }}><TrendArrow pct={trend} higher={m.higher} /></td>
-          <td style={{ padding: "8px 10px", textAlign: "center" }}><Sparkline weeks={client.weeks} metricKey={m.key} group={group} width={50} height={20} /></td>
-        </tr>
-      );
-    })
-  ];
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead>
-          <tr style={{ borderBottom: `2px solid ${COLORS.grayBorder}` }}>
-            <th style={{ textAlign: "left", padding: "8px 10px", color: COLORS.muted, fontWeight: 500 }}>Metric</th>
-            <th style={{ textAlign: "center", padding: "8px 10px", color: COLORS.muted, fontWeight: 500, width: 56 }}>Type</th>
-            {client.weeks.map(w => <th key={w.week} style={{ textAlign: "right", padding: "8px 10px", color: COLORS.muted, fontWeight: 500, whiteSpace: "nowrap" }}>{w.week}</th>)}
-            <th style={{ textAlign: "right", padding: "8px 10px", color: COLORS.muted, fontWeight: 500 }}>Trend</th>
-            <th style={{ textAlign: "center", padding: "8px 10px", color: COLORS.muted, fontWeight: 500 }}>Spark</th>
-          </tr>
-        </thead>
-        <tbody>
-          {renderRows(LEADING_METRICS, "leading", "Leading indicators", COLORS.accent, COLORS.blueBg, "#dcfce7", "#166534", "LEAD")}
-          {renderRows(LAGGING_METRICS, "lagging", "Lagging indicators", "#7c3aed", "#f5f3ff", "#ede9fe", "#6d28d9", "LAG")}
-        </tbody>
-      </table>
-    </div>
-  );
+  const renderRows = (metrics, group, headerLabel, headerColor, headerBg, badgeBg, badgeColor, badgeLabel) => [<tr key={`header-${group}`}><td colSpan={colSpan} style={{ padding: "8px 10px", fontSize: 11, fontWeight: 600, color: headerColor, textTransform: "uppercase", letterSpacing: "0.08em", background: headerBg }}>{headerLabel}</td></tr>, ...metrics.map(m => { const trend = getTrend(client.weeks, m.key, group); return (<tr key={m.key} style={{ borderBottom: `1px solid ${COLORS.grayBorder}` }}><td style={{ padding: "8px 10px", color: COLORS.ink, fontWeight: 500 }}>{m.label}</td><td style={{ padding: "8px 10px", textAlign: "center" }}><span style={{ background: badgeBg, color: badgeColor, borderRadius: 4, padding: "2px 6px", fontSize: 10, fontWeight: 600 }}>{badgeLabel}</span></td>{client.weeks.map(w => { const v = w[group][m.key]; const rag = getRag(v, m); const bg = rag === "green" ? COLORS.greenBg : rag === "yellow" ? COLORS.yellowBg : COLORS.redBg; const color = rag === "green" ? COLORS.green : rag === "yellow" ? COLORS.yellow : COLORS.red; return <td key={w.week} style={{ padding: "8px 10px", textAlign: "right", background: bg, color, fontWeight: 600 }}>{fmtVal(m, v)}</td>; })}<td style={{ padding: "8px 10px", textAlign: "right" }}><TrendArrow pct={trend} higher={m.higher} /></td><td style={{ padding: "8px 10px", textAlign: "center" }}><Sparkline weeks={client.weeks} metricKey={m.key} group={group} width={50} height={20} /></td></tr>); })];
+  return (<div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}><thead><tr style={{ borderBottom: `2px solid ${COLORS.grayBorder}` }}><th style={{ textAlign: "left", padding: "8px 10px", color: COLORS.muted, fontWeight: 500 }}>Metric</th><th style={{ textAlign: "center", padding: "8px 10px", color: COLORS.muted, fontWeight: 500, width: 56 }}>Type</th>{client.weeks.map(w => <th key={w.week} style={{ textAlign: "right", padding: "8px 10px", color: COLORS.muted, fontWeight: 500, whiteSpace: "nowrap" }}>{w.week}</th>)}<th style={{ textAlign: "right", padding: "8px 10px", color: COLORS.muted, fontWeight: 500 }}>Trend</th><th style={{ textAlign: "center", padding: "8px 10px", color: COLORS.muted, fontWeight: 500 }}>Spark</th></tr></thead><tbody>{renderRows(LEADING_METRICS, "leading", "Leading indicators", COLORS.accent, COLORS.blueBg, "#dcfce7", "#166534", "LEAD")}{renderRows(LAGGING_METRICS, "lagging", "Lagging indicators", "#7c3aed", "#f5f3ff", "#ede9fe", "#6d28d9", "LAG")}</tbody></table></div>);
 }
-
 function AccountDetail({ client, onBack }) {
   const [tab, setTab] = useState("overview");
   const latest = client.weeks[client.weeks.length - 1];
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-        <button onClick={onBack} style={{ background: "none", border: `1px solid ${COLORS.grayBorder}`, borderRadius: 8, padding: "6px 14px", fontSize: 13, cursor: "pointer", color: COLORS.muted }}>← All clients</button>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 20, color: COLORS.ink }}>{client.name}</div>
-          <div style={{ fontSize: 13, color: COLORS.muted }}>{client.location} · ${client.budget.toLocaleString()}/mo · Week of {latest.week}</div>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${COLORS.grayBorder}` }}>
-        {[["overview","Overview"],["table","Weekly table"],["analysis","AI analysis"]].map(([val, label]) => (
-          <button key={val} onClick={() => setTab(val)} style={{ background: "none", border: "none", borderBottom: tab === val ? `2px solid ${COLORS.accent}` : "2px solid transparent", padding: "8px 16px", fontSize: 13, fontWeight: tab === val ? 600 : 400, color: tab === val ? COLORS.accent : COLORS.muted, cursor: "pointer", marginBottom: -1 }}>{label}</button>
-        ))}
-      </div>
-      {tab === "overview" && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.accent, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Leading indicators</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 24 }}>
-            {LEADING_METRICS.map(m => <MetricCard key={m.key} metric={m} group="leading" weeks={client.weeks} />)}
-          </div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Lagging indicators</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            {LAGGING_METRICS.map(m => <MetricCard key={m.key} metric={m} group="lagging" weeks={client.weeks} />)}
-          </div>
-        </div>
-      )}
-      {tab === "table" && <WeeklyTable client={client} />}
-      {tab === "analysis" && <AICommentary client={client} />}
-    </div>
-  );
+  return (<div><div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}><button onClick={onBack} style={{ background: "none", border: `1px solid ${COLORS.grayBorder}`, borderRadius: 8, padding: "6px 14px", fontSize: 13, cursor: "pointer", color: COLORS.muted }}>← All clients</button><div><div style={{ fontWeight: 700, fontSize: 20, color: COLORS.ink }}>{client.name}</div><div style={{ fontSize: 13, color: COLORS.muted }}>{client.location} · ${client.budget.toLocaleString()}/mo · Week of {latest.week}</div></div></div><div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${COLORS.grayBorder}` }}>{[["overview","Overview"],["table","Weekly table"],["analysis","AI analysis"]].map(([val, label]) => (<button key={val} onClick={() => setTab(val)} style={{ background: "none", border: "none", borderBottom: tab === val ? `2px solid ${COLORS.accent}` : "2px solid transparent", padding: "8px 16px", fontSize: 13, fontWeight: tab === val ? 600 : 400, color: tab === val ? COLORS.accent : COLORS.muted, cursor: "pointer", marginBottom: -1 }}>{label}</button>))}</div>{tab === "overview" && (<div><div style={{ fontSize: 12, fontWeight: 600, color: COLORS.accent, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Leading indicators</div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 24 }}>{LEADING_METRICS.map(m => <MetricCard key={m.key} metric={m} group="leading" weeks={client.weeks} />)}</div><div style={{ fontSize: 12, fontWeight: 600, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Lagging indicators</div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>{LAGGING_METRICS.map(m => <MetricCard key={m.key} metric={m} group="lagging" weeks={client.weeks} />)}</div></div>)}{tab === "table" && <WeeklyTable client={client} />}{tab === "analysis" && <AICommentary client={client} />}</div>);
 }
-
-export default function app() {
-  const [clients] = useState(MOCK_CLIENTS);
+export default function App() {
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [sort, setSort] = useState("rag");
   const [filter, setFilter] = useState("all");
-
+  useEffect(() => {
+    fetch("/api/data")
+      .then(r => r.json())
+      .then(data => { setClients(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
   const ragScore = c => { const r = allRags(c); return r.filter(x => x === "red").length * 10 + r.filter(x => x === "yellow").length; };
-
-  const sorted = [...clients]
-    .sort((a, b) => sort === "rag" ? ragScore(b) - ragScore(a) : sort === "name" ? a.name.localeCompare(b.name) : b.budget - a.budget)
-    .filter(c => {
-      const r = allRags(c);
-      if (filter === "red") return r.some(x => x === "red");
-      if (filter === "green") return r.every(x => x === "green");
-      return true;
-    });
-
+  const sorted = [...clients].sort((a, b) => sort === "rag" ? ragScore(b) - ragScore(a) : sort === "name" ? a.name.localeCompare(b.name) : b.budget - a.budget).filter(c => { const r = allRags(c); if (filter === "red") return r.some(x => x === "red"); if (filter === "green") return r.every(x => x === "green"); return true; });
   const needsAction = clients.filter(c => allRags(c).some(r => r === "red")).length;
   const onWatch = clients.filter(c => { const r = allRags(c); return !r.some(x => x === "red") && r.some(x => x === "yellow"); }).length;
   const healthy = clients.filter(c => allRags(c).every(r => r === "green")).length;
   const totalReds = clients.reduce((sum, c) => sum + allRags(c).filter(r => r === "red").length, 0);
-
-  if (selected) return (
-    <div style={{ fontFamily: "system-ui, sans-serif", background: COLORS.page, minHeight: "100vh", padding: "24px 20px" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto", background: COLORS.surface, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-        <AccountDetail client={selected} onBack={() => setSelected(null)} />
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ fontFamily: "system-ui, sans-serif", background: COLORS.page, minHeight: "100vh", padding: "24px 20px" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: COLORS.ink }}>Google Ads dashboard</div>
-          <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>{clients.length} accounts · {totalReds} red flags · Week of Jun 16</div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
-          {[
-            { label: "Needs action", value: needsAction, color: COLORS.red, bg: COLORS.redBg },
-            { label: "On watch", value: onWatch, color: COLORS.yellow, bg: COLORS.yellowBg },
-            { label: "Healthy", value: healthy, color: COLORS.green, bg: COLORS.greenBg },
-          ].map(s => (
-            <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: "14px 16px" }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: COLORS.muted }}>Sort:</span>
-          {[["rag","Priority"],["name","Name"],["budget","Budget"]].map(([val, label]) => (
-            <button key={val} onClick={() => setSort(val)} style={{ background: sort === val ? COLORS.ink : "none", color: sort === val ? "#fff" : COLORS.muted, border: `1px solid ${sort === val ? COLORS.ink : COLORS.grayBorder}`, borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>{label}</button>
-          ))}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            {[["all","All"],["red","Needs action"],["green","Healthy"]].map(([val, label]) => (
-              <button key={val} onClick={() => setFilter(val)} style={{ background: filter === val ? COLORS.ink : "none", color: filter === val ? "#fff" : COLORS.muted, border: `1px solid ${filter === val ? COLORS.ink : COLORS.grayBorder}`, borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>{label}</button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {sorted.map(c => <ClientRowSummary key={c.id} client={c} onClick={() => setSelected(c)} />)}
-        </div>
-
-        <div style={{ marginTop: 20, padding: "12px 16px", background: COLORS.surface, borderRadius: 10, border: `1px solid ${COLORS.grayBorder}`, fontSize: 12, color: COLORS.muted }}>
-          Running on mock data · Wire to Google Sheets API or Google Ads API on your backend · AI analysis uses Claude API
-        </div>
-      </div>
-    </div>
-  );
+  if (selected) return (<div style={{ fontFamily: "system-ui, sans-serif", background: COLORS.page, minHeight: "100vh", padding: "24px 20px" }}><div style={{ maxWidth: 900, margin: "0 auto", background: COLORS.surface, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}><AccountDetail client={selected} onBack={() => setSelected(null)} /></div></div>);
+  return (<div style={{ fontFamily: "system-ui, sans-serif", background: COLORS.page, minHeight: "100vh", padding: "24px 20px" }}><div style={{ maxWidth: 900, margin: "0 auto" }}><div style={{ marginBottom: 24 }}><div style={{ fontSize: 22, fontWeight: 700, color: COLORS.ink }}>Google Ads dashboard</div><div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>{loading ? "Loading…" : `${clients.length} accounts · ${totalReds} red flags`}</div></div><div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>{[{ label: "Needs action", value: needsAction, color: COLORS.red, bg: COLORS.redBg }, { label: "On watch", value: onWatch, color: COLORS.yellow, bg: COLORS.yellowBg }, { label: "Healthy", value: healthy, color: COLORS.green, bg: COLORS.greenBg }].map(s => (<div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: "14px 16px" }}><div style={{ fontSize: 28, fontWeight: 700, color: s.color }}>{s.value}</div><div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>{s.label}</div></div>))}</div><div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}><span style={{ fontSize: 12, color: COLORS.muted }}>Sort:</span>{[["rag","Priority"],["name","Name"],["budget","Budget"]].map(([val, label]) => (<button key={val} onClick={() => setSort(val)} style={{ background: sort === val ? COLORS.ink : "none", color: sort === val ? "#fff" : COLORS.muted, border: `1px solid ${sort === val ? COLORS.ink : COLORS.grayBorder}`, borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>{label}</button>))}<div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>{[["all","All"],["red","Needs action"],["green","Healthy"]].map(([val, label]) => (<button key={val} onClick={() => setFilter(val)} style={{ background: filter === val ? COLORS.ink : "none", color: filter === val ? "#fff" : COLORS.muted, border: `1px solid ${filter === val ? COLORS.ink : COLORS.grayBorder}`, borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>{label}</button>))}</div></div>{loading ? <div style={{ textAlign: "center", padding: 40, color: COLORS.muted }}>Loading client data…</div> : sorted.length === 0 ? <div style={{ textAlign: "center", padding: 40, color: COLORS.muted }}>No clients found.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{sorted.map(c => <ClientRowSummary key={c.id} client={c} onClick={() => setSelected(c)} />)}</div>}<div style={{ marginTop: 20, padding: "12px 16px", background: COLORS.surface, borderRadius: 10, border: `1px solid ${COLORS.grayBorder}`, fontSize: 12, color: COLORS.muted }}>Connected to Google Sheets · AI analysis uses Claude API</div></div></div>);
 }
