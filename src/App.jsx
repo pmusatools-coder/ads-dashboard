@@ -1,5 +1,4 @@
-import { useState } from "react";
-
+import { useState, useEffect } from "react";
 const COLORS = {
   green: "#16a34a", greenBg: "#f0fdf4", greenBorder: "#bbf7d0",
   yellow: "#ca8a04", yellowBg: "#fefce8", yellowBorder: "#fde68a",
@@ -350,7 +349,15 @@ function AccountDetail({ client, onBack }) {
 }
 
 export default function App() {
-  const [clients] = useState(MOCK_CLIENTS);
+const [clients, setClients] = useState(MOCK_CLIENTS);
+const [loading, setLoading] = useState(false);
+
+useEffect(() => {
+  fetch("/api/data")
+    .then(r => r.json())
+    .then(data => { if (data.length) setClients(data); })
+    .catch(() => {});
+}, []);
   const [selected, setSelected] = useState(null);
   const [sort, setSort] = useState("rag");
   const [filter, setFilter] = useState("all");
