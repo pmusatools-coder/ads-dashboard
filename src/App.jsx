@@ -7,62 +7,7 @@ const COLORS = {
   ink: "#111827", muted: "#6b7280", surface: "#ffffff", page: "#f3f4f6", accent: "#2563eb",
 };
 
-const MOCK_CLIENTS = [
-  {
-    id: 1, name: "Riverside Plumbing", location: "Riverside, CA", budget: 3000,
-    weeks: [
-      { week: "Jun 2",  leading: { ctr: 4.1, searchTermRelevance: 71, landingBounce: 52 }, lagging: { cpl: 87,  conversions: 18, convRate: 3.8, roas: 4.2 } },
-      { week: "Jun 9",  leading: { ctr: 4.4, searchTermRelevance: 73, landingBounce: 49 }, lagging: { cpl: 82,  conversions: 20, convRate: 4.1, roas: 4.6 } },
-      { week: "Jun 16", leading: { ctr: 3.7, searchTermRelevance: 68, landingBounce: 61 }, lagging: { cpl: 104, conversions: 14, convRate: 3.1, roas: 3.4 } },
-    ]
-  },
-  {
-    id: 2, name: "Blue Ridge HVAC", location: "Denver, CO", budget: 5000,
-    weeks: [
-      { week: "Jun 2",  leading: { ctr: 5.9, searchTermRelevance: 84, landingBounce: 38 }, lagging: { cpl: 61, conversions: 34, convRate: 5.4, roas: 6.1 } },
-      { week: "Jun 9",  leading: { ctr: 6.1, searchTermRelevance: 85, landingBounce: 37 }, lagging: { cpl: 58, conversions: 36, convRate: 5.7, roas: 6.4 } },
-      { week: "Jun 16", leading: { ctr: 6.3, searchTermRelevance: 86, landingBounce: 35 }, lagging: { cpl: 55, conversions: 39, convRate: 5.9, roas: 6.8 } },
-    ]
-  },
-  {
-    id: 3, name: "QuickFlow Drains", location: "Phoenix, AZ", budget: 2000,
-    weeks: [
-      { week: "Jun 2",  leading: { ctr: 2.8, searchTermRelevance: 55, landingBounce: 71 }, lagging: { cpl: 143, conversions: 7,  convRate: 1.9, roas: 2.1 } },
-      { week: "Jun 9",  leading: { ctr: 2.9, searchTermRelevance: 57, landingBounce: 69 }, lagging: { cpl: 138, conversions: 8,  convRate: 2.1, roas: 2.2 } },
-      { week: "Jun 16", leading: { ctr: 2.5, searchTermRelevance: 51, landingBounce: 76 }, lagging: { cpl: 159, conversions: 6,  convRate: 1.7, roas: 1.8 } },
-    ]
-  },
-  {
-    id: 4, name: "Summit Mechanical", location: "Salt Lake City, UT", budget: 4200,
-    weeks: [
-      { week: "Jun 2",  leading: { ctr: 5.1, searchTermRelevance: 78, landingBounce: 44 }, lagging: { cpl: 74, conversions: 26, convRate: 4.6, roas: 5.2 } },
-      { week: "Jun 9",  leading: { ctr: 5.3, searchTermRelevance: 80, landingBounce: 43 }, lagging: { cpl: 71, conversions: 28, convRate: 4.8, roas: 5.5 } },
-      { week: "Jun 16", leading: { ctr: 5.2, searchTermRelevance: 79, landingBounce: 44 }, lagging: { cpl: 72, conversions: 27, convRate: 4.7, roas: 5.3 } },
-    ]
-  },
-  {
-    id: 5, name: "Precision Plumbing Co", location: "Las Vegas, NV", budget: 3800,
-    weeks: [
-      { week: "Jun 2",  leading: { ctr: 3.5, searchTermRelevance: 64, landingBounce: 58 }, lagging: { cpl: 98,  conversions: 15, convRate: 3.2, roas: 3.7 } },
-      { week: "Jun 9",  leading: { ctr: 3.2, searchTermRelevance: 61, landingBounce: 62 }, lagging: { cpl: 108, conversions: 13, convRate: 2.9, roas: 3.3 } },
-      { week: "Jun 16", leading: { ctr: 2.9, searchTermRelevance: 57, landingBounce: 66 }, lagging: { cpl: 122, conversions: 11, convRate: 2.6, roas: 2.9 } },
-    ]
-  },
-];
-
-const LEADING_METRICS = [
-  { key: "ctr",                 label: "CTR",                   unit: "%", suffix: "%", higher: true,  green: [5, 100],    yellow: [3, 5],     desc: "Ad copy effectiveness" },
-  { key: "searchTermRelevance", label: "Search Term Relevance", unit: "%", suffix: "%", higher: true,  green: [75, 100],   yellow: [55, 75],   desc: "% spend on relevant queries" },
-  { key: "landingBounce",       label: "Landing Bounce Rate",   unit: "%", suffix: "%", higher: false, green: [0, 45],     yellow: [45, 60],   desc: "Ad-to-page match signal" },
-];
-
-const LAGGING_METRICS = [
-  { key: "cpl",         label: "Cost per Lead", unit: "$", suffix: "",  higher: false, green: [0, 80],    yellow: [80, 120],  desc: "Core efficiency outcome" },
-  { key: "conversions", label: "Conversions",   unit: "",  suffix: "",  higher: true,  green: [20, 999],  yellow: [10, 20],   desc: "Leads generated" },
-  { key: "convRate",    label: "Conv. Rate",    unit: "%", suffix: "%", higher: true,  green: [4.5, 100], yellow: [2.5, 4.5], desc: "Clicks becoming leads" },
-  { key: "roas",        label: "ROAS",          unit: "",  suffix: "x", higher: true,  green: [5, 999],   yellow: [3, 5],     desc: "Revenue per $ spent" },
-];
-
+cconst MOCK_CLIENTS = [];
 function getRag(value, metric) {
   const v = parseFloat(value);
   if (metric.higher) {
