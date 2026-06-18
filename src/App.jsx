@@ -7,7 +7,7 @@ const COLORS = {
   ink: "#111827", muted: "#6b7280", surface: "#ffffff", page: "#f3f4f6", accent: "#2563eb",
 };
 
-cconst MOCK_CLIENTS = [];
+const MOCK_CLIENTS = [];
 function getRag(value, metric) {
   const v = parseFloat(value);
   if (metric.higher) {
